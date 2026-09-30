@@ -1,7 +1,17 @@
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(BACKEND_DIR / ".env.local")
+
+database_url = os.getenv("DATABASE_URL")
+if os.getenv("VERCEL") == "1" and not database_url:
+    raise RuntimeError("DATABASE_URL must be configured for Vercel deployments")
 
 class Settings:
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./nwis_prototype.db")
+    DATABASE_URL: str = database_url or "sqlite:///./nwis_prototype.db"
     CORS_ORIGINS: list[str] = [
         origin.strip().rstrip("/")
         for origin in os.getenv(

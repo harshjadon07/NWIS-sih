@@ -3,3 +3,6 @@ backend/venv/
 backend/app/__pycache__/
 backend/*.pyc
 frontend/node_modules/
+.neon
+.env.local
+node_modules/
