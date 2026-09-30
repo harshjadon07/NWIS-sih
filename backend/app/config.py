@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-load_dotenv(BACKEND_DIR / ".env.local")
+load_dotenv(BACKEND_DIR / ".env")
 
 database_url = os.getenv("DATABASE_URL")
 if os.getenv("VERCEL") == "1" and not database_url:
