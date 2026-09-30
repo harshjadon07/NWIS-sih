@@ -1,8 +1,12 @@
 import unittest
+from datetime import datetime
+from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.routers.drilling import get_live_drilling_data
 from app.services.risk_model import RiskMLPipeline
+from app.simulator import LiveDrillingData
 
 
 class RiskPipelineTests(unittest.TestCase):
@@ -36,6 +40,29 @@ class RiskPipelineTests(unittest.TestCase):
         self.assertEqual(current_response.status_code, 200)
         fingerprint_response = client.get('/api/risk/fingerprint?well_id=WELL-A&event_type=Mud%20Loss')
         self.assertEqual(fingerprint_response.status_code, 200)
+
+    def test_live_telemetry_survives_alert_processing_failure(self):
+        db = Mock()
+        live_data = LiveDrillingData(
+            well_id='WELL-A',
+            timestamp=datetime.utcnow(),
+            depth=2430.0,
+            rop=12.0,
+            wob=18.0,
+            torque=20.0,
+            rpm=120.0,
+            pump_pressure=3000.0,
+            flow_rate=400.0,
+            mud_density=1.18,
+            standpipe_pressure=2800.0,
+        )
+
+        with patch('app.routers.drilling.simulator.get_live_data', return_value=live_data):
+            with patch('app.routers.drilling.process_live_data', side_effect=RuntimeError('database write failed')):
+                result = get_live_drilling_data(db)
+
+        self.assertIs(result, live_data)
+        db.rollback.assert_called_once()
 
 
 if __name__ == '__main__':
