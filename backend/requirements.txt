@@ -3,4 +3,10 @@ uvicorn[standard]
 sqlalchemy
 pydantic
 python-dateutil
+python-multipart
+python-dotenv
+requests
+reportlab
 pypdf
+pytest
+httpx
