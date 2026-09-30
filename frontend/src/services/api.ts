@@ -5,7 +5,7 @@ import type {
 } from '../types';
 
 const api = axios.create({
-  baseURL: "nwis-sih-nine.vercel.app",
+  baseURL: import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '/api' : 'https://nwis-sih-nine.vercel.app/api'),
 });
 
 export const getWells = async (params?: Record<string, any>) => {

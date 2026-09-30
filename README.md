@@ -66,6 +66,11 @@ You do not need to manually run any database setup scripts. When you start the b
 
 ## Environment Variables
 
-Currently, the application runs out-of-the-box without requiring complex environment variable configuration. 
-- **Backend**: Uses a local SQLite database by default (`sqlite:///./nwis_prototype.db`).
-- **Frontend**: API Base URL is configured in `frontend/src/services/api.ts` to point to `http://localhost:8000/api`.
+The frontend uses `/api` through the Vite development proxy locally and
+`https://nwis-sih-nine.vercel.app/api` in production by default. Set
+`VITE_API_BASE_URL` at build time to use a different API origin; include the
+`/api` path, for example `https://api.example.com/api`.
+
+For a separately hosted backend, set its `CORS_ORIGINS` environment variable to
+a comma-separated list of frontend origins without trailing slashes. The
+default list includes the local Vite origins and `https://nwis-sih2026.netlify.app`.
