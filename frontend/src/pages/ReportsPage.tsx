@@ -109,7 +109,7 @@ export const ReportsPage = () => {
         <label 
           htmlFor="file-upload"
           className={`px-6 py-3 rounded-lg font-medium cursor-pointer transition-colors inline-block
-            ${uploading ? 'bg-tertiary text-text-secondary' : 'bg-accent text-background hover:bg-accent/90'}
+            ${uploading ? 'bg-tertiary text-text-secondary' : 'bg-accent text-white hover:bg-accent/90'}
           `}
         >
           {uploading ? 'Uploading...' : 'Select File'}

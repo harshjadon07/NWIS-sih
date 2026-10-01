@@ -1,4 +1,40 @@
-import React, { useEffect, useState } from 'react';
+import re
+
+css_content = """@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+@theme {
+  --color-primary: #ffffff;
+  --color-secondary: #f9fafb;
+  --color-tertiary: #f3f4f6;
+  --color-border: #e5e7eb;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-accent: #2563eb;
+  --color-accent-green: #16a34a;
+  --color-accent-amber: #d97706;
+  --color-accent-red: #dc2626;
+  --color-accent-cyan: #0891b2;
+}
+
+body {
+  background-color: var(--color-primary);
+  color: var(--color-text-primary);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+"""
+
+with open(r"C:\Users\harsh\Desktop\sih 26121\frontend\src\index.css", "w", encoding="utf-8") as f:
+    f.write(css_content)
+
+map_content = """import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { getNearbyWells } from '../../services/api';
@@ -57,8 +93,8 @@ export const NearbyWellMap: React.FC<MapProps> = ({ radius, selectedWellId, onSe
       className="z-0"
     >
       <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
       />
       
       <MapUpdater center={ACTIVE_WELL_COORDS} radius={radius} />
@@ -94,3 +130,7 @@ export const NearbyWellMap: React.FC<MapProps> = ({ radius, selectedWellId, onSe
     </MapContainer>
   );
 };
+"""
+
+with open(r"C:\Users\harsh\Desktop\sih 26121\frontend\src\components\Map\NearbyWellMap.tsx", "w", encoding="utf-8") as f:
+    f.write(map_content)

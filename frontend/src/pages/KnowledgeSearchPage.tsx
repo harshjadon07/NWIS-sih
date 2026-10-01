@@ -51,7 +51,7 @@ export const KnowledgeSearchPage = () => {
         <button
           type="submit"
           disabled={loading}
-          className="absolute inset-y-2 right-2 px-6 bg-accent text-background rounded-lg font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
+          className="absolute inset-y-2 right-2 px-6 bg-accent text-white rounded-lg font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
         >
           {loading ? 'Searching...' : 'Search'}
         </button>
@@ -100,8 +100,8 @@ export const KnowledgeSearchPage = () => {
                   </div>
                 </div>
 
-                <div className="prose prose-invert max-w-none mb-6 text-text-primary/90">
-                  <p className="leading-relaxed bg-background/50 p-4 rounded-lg border-l-2 border-accent">
+                <div className="prose max-w-none mb-6 text-text-primary/90">
+                  <p className="leading-relaxed bg-tertiary p-4 rounded-lg border-l-2 border-accent">
                     "{result.chunk.chunk_text}"
                   </p>
                 </div>

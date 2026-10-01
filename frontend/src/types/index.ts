@@ -181,6 +181,7 @@ export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
+  originalText?: string;
   timestamp: string;
   tools_called?: ToolCallInfo[];
   sources?: SourceCitation[];

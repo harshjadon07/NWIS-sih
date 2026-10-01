@@ -36,17 +36,17 @@ export const DrillingChart = () => {
       <div className="flex-1 w-full min-h-[250px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" vertical={false} />
-            <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickMargin={10} />
-            <YAxis stroke="#94a3b8" fontSize={12} domain={['auto', 'auto']} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <XAxis dataKey="time" stroke="#6b7280" fontSize={12} tickMargin={10} />
+            <YAxis stroke="#6b7280" fontSize={12} domain={['auto', 'auto']} />
             <Tooltip 
-              contentStyle={{ backgroundColor: '#111827', borderColor: '#1e3a5f', color: '#e2e8f0' }}
-              itemStyle={{ color: '#06b6d4' }}
+              contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e5e7eb', color: '#111827' }}
+              itemStyle={{ color: '#0891b2' }}
             />
             <Line 
               type="monotone" 
               dataKey="rop" 
-              stroke="#06b6d4" 
+              stroke="#2563eb" 
               strokeWidth={2} 
               dot={false}
               isAnimationActive={false} 

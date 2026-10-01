@@ -57,12 +57,12 @@ export const RiskByDepth: React.FC<Props> = ({ onSelectDepth }) => {
           }
         }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" horizontal={true} vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={true} vertical={false} />
         <YAxis
           dataKey="depth"
           type="category"
           reversed={true}
-          stroke="#94a3b8"
+          stroke="#6b7280"
           tick={{ fontSize: 11 }}
           width={60}
           tickFormatter={(val) => `${val}m`}
@@ -70,11 +70,11 @@ export const RiskByDepth: React.FC<Props> = ({ onSelectDepth }) => {
         <XAxis
           type="number"
           domain={[0, 100]}
-          stroke="#94a3b8"
+          stroke="#6b7280"
           tick={{ fontSize: 12 }}
           tickFormatter={(val) => `${val}`}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: '#1a2332' }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f3f4f6' }} />
         <Bar dataKey="risk_score" radius={[0, 4, 4, 0]} cursor="pointer">
           {data.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={getRiskColor(entry.risk_score)} />

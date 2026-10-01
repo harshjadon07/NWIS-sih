@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Bot, Send, Sparkles, AlertTriangle, ShieldCheck, Database, 
-  MapPin, Layers, FileText, ArrowRight, Activity, Terminal, RefreshCw
+  Send, Bot, User, Sparkles, FileText, AlertCircle, ChevronRight, Activity, Terminal, Mic, MicOff, Volume2, Square, Loader2
 } from 'lucide-react';
 import { getCopilotContext, sendCopilotMessage } from '../services/api';
 import type { CopilotContext, ChatMessage } from '../types';
 
 const QUICK_PROMPTS = [
-  "Explain Current Risk",
-  "Find Similar Wells",
-  "Historical Events Near Me",
-  "Show Supporting Reports",
-  "Compare Wells",
-  "Upcoming Risk Zones",
+  "Explain current risk factors",
+  "Find similar historical wells",
   "What happened around 2500 metres?",
   "Which nearby wells experienced mud loss?"
 ];
@@ -21,18 +16,105 @@ export const CopilotPage = () => {
   const [context, setContext] = useState<CopilotContext | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [inputLanguage, setInputLanguage] = useState('en-US');
+  const [isListening, setIsListening] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [isTranslatingMsg, setIsTranslatingMsg] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      
+      recognitionRef.current.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+           setInput(prev => (prev ? prev + ' ' : '') + finalTranscript);
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+      recognitionRef.current.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+      };
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.lang = inputLanguage;
+          recognitionRef.current.start();
+          setIsListening(true);
+        } catch(e) {
+          console.error(e);
+        }
+      } else {
+        alert("Speech Recognition is not supported in this browser.");
+      }
+    }
+  };
+
+  const getTranslateLang = (bcp47: string) => {
+    if (bcp47.startsWith('hi') || bcp47 === 'en-IN') return 'hi';
+    return 'en';
+  };
+
+  const translateText = async (text: string, toLang: string) => {
+    try {
+      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${toLang}&dt=t&q=${encodeURIComponent(text)}`);
+      const data = await res.json();
+      return data[0].map((item: any) => item[0]).join('');
+    } catch (e) {
+      console.error("Translation error", e);
+      return text;
+    }
+  };
+
+  const handlePlayAudio = (msg: ChatMessage) => {
+    if (playingId === msg.id) {
+       window.speechSynthesis.cancel();
+       setPlayingId(null);
+       return;
+    }
+    window.speechSynthesis.cancel();
+    setPlayingId(msg.id);
+
+    let textToSpeak = msg.originalText || msg.text;
+    textToSpeak = textToSpeak.replace(/[#*>_`]/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.lang = 'en-US';
+    utterance.onend = () => setPlayingId(null);
+    utterance.onerror = () => setPlayingId(null);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `### Welcome to the NWIS AI Drilling Copilot
-
-I am your decision-support assistant grounded in offset well historical telemetry, geological databases, and archived drilling reports.
+      text: `Welcome to the NWIS Drilling Copilot. I'm connected to your live telemetry and the historical well database.
 
 **Current Active Well:** \`WELL-A\`  
-I am continuously tracking your depth, formation transitions, and offset hazard models in real time. 
+I am tracking your depth, formation transitions, and offset hazard models in real time. 
 
-Feel free to ask questions about current operational risks, nearby analog wells, historical mitigations, or select any quick prompt below.`,
+How can I help you analyze the current drilling environment?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       tools_called: [],
       sources: []
@@ -74,13 +156,30 @@ Feel free to ask questions about current operational risks, nearby analog wells,
     setMessages(prev => [...prev, userMsg]);
     if (!queryText) setInput('');
     setLoading(true);
+    setIsTranslatingMsg(true);
 
     try {
-      const response = await sendCopilotMessage(textToSend, context?.active_well || 'WELL-A');
+      let englishText = textToSend;
+      const langCode = getTranslateLang(inputLanguage);
+      if (langCode !== 'en') {
+        englishText = await translateText(textToSend, 'en');
+      }
+
+      setIsTranslatingMsg(false);
+      const response = await sendCopilotMessage(englishText, context?.active_well || 'WELL-A');
+      
+      let displayText = response.reply;
+      if (langCode !== 'en') {
+        setIsTranslatingMsg(true);
+        displayText = await translateText(response.reply, langCode);
+        setIsTranslatingMsg(false);
+      }
+
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         sender: 'assistant',
-        text: response.reply,
+        text: displayText,
+        originalText: response.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         tools_called: response.tools_called,
         sources: response.sources
@@ -91,80 +190,78 @@ Feel free to ask questions about current operational risks, nearby analog wells,
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         sender: 'assistant',
-        text: "I could not retrieve an answer from the NWIS system at this moment. Please verify backend connectivity and try again.",
+        text: "I was unable to connect to the backend services. Please ensure the server is running and try again.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+      setIsTranslatingMsg(false);
     }
   };
 
   const renderFormattedText = (text: string) => {
-    // Process markdown-like lines for clean control-room presentation
     const lines = text.split('\n');
     return (
-      <div className="space-y-2 text-sm leading-relaxed">
+      <div className="space-y-3 text-[15px] leading-relaxed text-text-primary">
         {lines.map((line, idx) => {
           if (line.startsWith('### ')) {
             return (
-              <h3 key={idx} className="text-base font-bold text-accent-cyan flex items-center gap-2 mt-3 mb-1">
-                <Sparkles className="w-4 h-4 text-accent" />
+              <h3 key={idx} className="text-lg font-semibold text-text-primary mt-6 mb-2">
                 {line.replace('### ', '')}
               </h3>
             );
           }
           if (line.startsWith('#### ')) {
             return (
-              <h4 key={idx} className="text-sm font-semibold text-text-primary mt-2 mb-1">
+              <h4 key={idx} className="text-base font-medium text-text-primary mt-4 mb-2">
                 {line.replace('#### ', '')}
               </h4>
             );
           }
           if (line.startsWith('> ')) {
             return (
-              <blockquote key={idx} className="border-l-2 border-accent-amber bg-tertiary/40 px-3 py-1.5 rounded text-text-secondary text-xs italic my-2">
+              <blockquote key={idx} className="border-l-4 border-accent-amber/50 bg-accent-amber/10 px-4 py-2 text-text-secondary rounded-r-md my-3 italic">
                 {line.replace('> ', '')}
               </blockquote>
             );
           }
           if (line.startsWith('* ') || line.startsWith('- ')) {
             return (
-              <div key={idx} className="flex items-start gap-2 pl-2 text-text-secondary">
-                <span className="text-accent">•</span>
+              <div key={idx} className="flex items-start gap-2 pl-2">
+                <span className="text-accent mt-1">•</span>
                 <span dangerouslySetInnerHTML={{ 
                   __html: line.substring(2)
-                    .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-text-primary">$1</strong>')
-                    .replace(/\`([^`]+)\`/g, '<code class="bg-tertiary px-1 py-0.5 rounded text-accent-cyan font-mono text-xs">$1</code>')
+                    .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-text-primary">$1</strong>')
+                    .replace(/\`([^`]+)\`/g, '<code class="bg-tertiary border border-border px-1.5 py-0.5 rounded text-sm text-text-primary font-mono">$1</code>')
                 }} />
               </div>
             );
           }
           if (line.startsWith('|') && line.endsWith('|')) {
-            // Markdown table row
             if (line.includes(':---')) return null;
             const cells = line.split('|').filter(c => c.trim() !== '');
             const isHeader = idx > 0 && lines[idx + 1]?.includes(':---');
             return (
-              <div key={idx} className={`grid grid-cols-${cells.length} gap-2 p-1.5 rounded text-xs ${isHeader ? 'bg-tertiary/80 font-bold text-text-primary border-b border-border' : 'hover:bg-tertiary/30 text-text-secondary'}`}>
+              <div key={idx} className={`flex border-b border-border ${isHeader ? 'bg-tertiary font-medium text-sm' : 'text-sm'}`}>
                 {cells.map((cell, cidx) => (
-                  <div key={cidx} dangerouslySetInnerHTML={{
+                  <div key={cidx} className="flex-1 px-4 py-2" dangerouslySetInnerHTML={{
                     __html: cell.trim()
-                      .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-text-primary">$1</strong>')
-                      .replace(/\`([^`]+)\`/g, '<code class="bg-tertiary px-1 py-0.5 rounded text-accent-cyan font-mono text-xs">$1</code>')
+                      .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-text-primary">$1</strong>')
+                      .replace(/\`([^`]+)\`/g, '<code class="bg-tertiary px-1 py-0.5 rounded text-xs font-mono">$1</code>')
                   }} />
                 ))}
               </div>
             );
           }
           if (!line.trim()) {
-            return <div key={idx} className="h-1" />;
+            return null;
           }
           return (
-            <p key={idx} className="text-text-primary" dangerouslySetInnerHTML={{
+            <p key={idx} dangerouslySetInnerHTML={{
               __html: line
-                .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-text-primary">$1</strong>')
-                .replace(/\`([^`]+)\`/g, '<code class="bg-tertiary px-1 py-0.5 rounded text-accent-cyan font-mono text-xs">$1</code>')
+                .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-text-primary">$1</strong>')
+                .replace(/\`([^`]+)\`/g, '<code class="bg-tertiary border border-border px-1.5 py-0.5 rounded text-sm text-text-primary font-mono">$1</code>')
             }} />
           );
         })}
@@ -173,260 +270,248 @@ Feel free to ask questions about current operational risks, nearby analog wells,
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] gap-4">
-      {/* 1. REAL-TIME OPERATIONAL CONTEXT BANNER */}
-      <div className="bg-secondary border border-border rounded-lg p-3.5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent-green animate-pulse" />
-              <span className="font-bold text-text-primary text-sm tracking-wide">
-                COPILOT MONITOR
-              </span>
-            </div>
-            <div className="h-4 w-px bg-border hidden sm:block" />
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-text-secondary">Well:</span>
-              <span className="font-mono font-bold text-text-primary bg-tertiary px-2 py-0.5 rounded">
-                {context?.active_well || 'WELL-A'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-text-secondary">Depth:</span>
-              <span className="font-mono font-bold text-accent-cyan bg-tertiary px-2 py-0.5 rounded">
-                {context ? `${context.current_depth.toFixed(1)} m` : '2,430.0 m'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs hidden md:flex">
-              <span className="text-text-secondary">Formation:</span>
-              <span className="font-medium text-text-primary bg-tertiary px-2 py-0.5 rounded">
-                {context?.formation || 'FORMATION-D (Disang Shale)'}
-              </span>
-            </div>
+    <div className="flex flex-col h-[calc(100vh-80px)] max-w-5xl mx-auto bg-secondary rounded-xl border border-border overflow-hidden shadow-sm">
+      
+      {/* Header Context Banner */}
+      <div className="bg-secondary border-b border-border px-6 py-4 flex flex-wrap items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="bg-accent/10 p-2 rounded-lg">
+            <Bot className="w-5 h-5 text-accent" />
           </div>
+          <div>
+            <h1 className="text-base font-semibold text-text-primary">AI Copilot</h1>
+            <p className="text-xs text-text-secondary">Assisting with real-time drilling operations</p>
+          </div>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-text-secondary">Current Risk:</span>
-              <span className={`px-2 py-0.5 rounded font-mono font-bold text-xs ${
-                context && context.risk_score >= 70 ? 'bg-accent-red/20 text-accent-red border border-accent-red/30' :
-                context && context.risk_score >= 40 ? 'bg-accent-amber/20 text-accent-amber border border-accent-amber/30' :
-                'bg-accent-green/20 text-accent-green border border-accent-green/30'
-              }`}>
-                {context ? `${context.risk_score.toFixed(0)}% (${context.risk_level})` : '78% (HIGH)'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-xs text-text-secondary hidden lg:flex">
-              <MapPin className="w-3.5 h-3.5 text-accent" />
-              <span>Offsets: {context?.nearby_wells?.join(', ') || 'WELL-B, WELL-C, WELL-D'}</span>
-            </div>
+        <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 bg-tertiary px-3 py-1.5 rounded-md border border-border">
+            <span className="text-text-secondary text-xs">Well:</span>
+            <span className="font-medium text-text-primary">{context?.active_well || 'WELL-A'}</span>
+          </div>
+          <div className="flex items-center gap-2 bg-tertiary px-3 py-1.5 rounded-md border border-border">
+            <span className="text-text-secondary text-xs">Depth:</span>
+            <span className="font-medium text-accent-cyan">{context ? `${context.current_depth.toFixed(1)} m` : '2,430.0 m'}</span>
+          </div>
+          <div className="hidden md:flex items-center gap-2 bg-tertiary px-3 py-1.5 rounded-md border border-border">
+            <span className="text-text-secondary text-xs">Formation:</span>
+            <span className="font-medium text-text-primary truncate max-w-[150px]">{context?.formation || 'Disang Shale'}</span>
+          </div>
+          
+          <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md border ${
+            context && context.risk_score >= 70 ? 'bg-accent-red/10 border-accent-red/30' :
+            context && context.risk_score >= 40 ? 'bg-accent-amber/10 border-accent-amber/30' :
+            'bg-accent-green/10 border-accent-green/30'
+          }`}>
+            <AlertCircle className={`w-4 h-4 ${
+              context && context.risk_score >= 70 ? 'text-accent-red' :
+              context && context.risk_score >= 40 ? 'text-accent-amber' :
+              'text-accent-green'
+            }`} />
+            <span className={`text-xs font-medium ${
+              context && context.risk_score >= 70 ? 'text-accent-red' :
+              context && context.risk_score >= 40 ? 'text-accent-amber' :
+              'text-accent-green'
+            }`}>
+              {context ? `${context.risk_level} RISK` : 'HIGH RISK'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 2. MAIN CHAT CONTAINER */}
-      <div className="flex-1 flex gap-4 min-h-0">
-        {/* Left: Chat history and interaction */}
-        <div className="flex-1 bg-secondary border border-border rounded-lg flex flex-col min-h-0 overflow-hidden shadow-sm">
-          {/* Messages scroll area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((msg) => (
-              <div 
-                key={msg.id} 
-                className={`flex gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {msg.sender === 'assistant' && (
-                  <div className="w-8 h-8 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center shrink-0 text-accent mt-0.5">
-                    <Bot className="w-5 h-5" />
-                  </div>
-                )}
-
-                <div className={`max-w-[85%] rounded-lg p-4 border ${
-                  msg.sender === 'user' 
-                    ? 'bg-accent/10 border-accent/30 text-text-primary' 
-                    : 'bg-tertiary/70 border-border text-text-primary'
-                }`}>
-                  {/* Tool execution badge */}
-                  {msg.tools_called && msg.tools_called.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 mb-3 pb-2 border-b border-border/50">
-                      <span className="text-[11px] font-semibold text-text-secondary flex items-center gap-1 mr-1">
-                        <Terminal className="w-3 h-3 text-accent-cyan" />
-                        Tools Executed:
-                      </span>
-                      {msg.tools_called.map((tc, t_idx) => (
-                        <span 
-                          key={t_idx} 
-                          className="bg-secondary px-2 py-0.5 rounded text-[10px] font-mono text-accent-cyan border border-border"
-                          title={tc.summary}
-                        >
-                          {tc.tool}()
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Render content */}
-                  {renderFormattedText(msg.text)}
-
-                  {/* Source citations cards */}
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-border/60">
-                      <div className="text-xs font-semibold text-text-secondary flex items-center gap-1.5 mb-2">
-                        <FileText className="w-3.5 h-3.5 text-accent-amber" />
-                        Documented Sources & Evidence Citations:
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {msg.sources.map((src, s_idx) => (
-                          <div 
-                            key={s_idx} 
-                            className="bg-secondary/90 p-2.5 rounded border border-border/80 hover:border-accent/40 transition-colors"
-                          >
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="font-semibold text-xs text-accent-cyan truncate">{src.title}</span>
-                              <span className="text-[10px] bg-tertiary px-1 rounded text-text-secondary shrink-0">p. {src.page}</span>
-                            </div>
-                            <div className="text-[11px] text-text-secondary mb-1">
-                              Well: <strong className="text-text-primary">{src.well}</strong> | Depth: <strong className="text-text-primary">{src.depth}</strong> | {src.event}
-                            </div>
-                            <p className="text-[11px] text-text-secondary italic line-clamp-2">
-                              "{src.excerpt}"
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="text-[10px] text-text-secondary text-right mt-1 opacity-70">
-                    {msg.timestamp}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {loading && (
-              <div className="flex gap-3 items-center text-text-secondary text-xs pl-2">
-                <div className="w-7 h-7 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center shrink-0 text-accent">
-                  <Bot className="w-4 h-4 animate-spin" />
-                </div>
-                <span>Querying offset telemetry, historical incident records, and RAG document archive...</span>
+      {/* Chat Area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-primary custom-scrollbar">
+        {messages.map((msg) => (
+          <div 
+            key={msg.id} 
+            className={`flex gap-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            {/* Avatar */}
+            {msg.sender === 'assistant' && (
+              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                <Bot className="w-4 h-4 text-white" />
               </div>
             )}
-            <div ref={messagesEndRef} />
-          </div>
 
-          {/* Quick Prompts Bar */}
-          <div className="p-2 border-t border-border bg-secondary/80 flex items-center gap-2 overflow-x-auto custom-scrollbar">
-            <span className="text-[11px] text-text-secondary font-medium shrink-0 flex items-center gap-1 pl-1">
-              <Sparkles className="w-3 h-3 text-accent" /> Quick:
-            </span>
-            {QUICK_PROMPTS.map((prompt) => (
-              <button
-                key={prompt}
-                onClick={() => handleSend(prompt)}
-                disabled={loading}
-                className="text-xs bg-tertiary border border-border hover:border-accent hover:text-accent-cyan text-text-secondary px-2.5 py-1 rounded-full whitespace-nowrap transition-colors shrink-0 disabled:opacity-50"
+            {/* Message Content */}
+            <div className={`max-w-[85%] md:max-w-[75%] ${
+              msg.sender === 'user' 
+                ? 'bg-tertiary border border-border text-text-primary px-5 py-3 rounded-2xl rounded-tr-sm shadow-sm' 
+                : 'text-text-primary'
+            }`}>
+              
+              {/* Tool Execution Tags */}
+              {msg.tools_called && msg.tools_called.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  {msg.tools_called.map((tc, t_idx) => (
+                    <div key={t_idx} className="flex items-center gap-1.5 bg-tertiary border border-border px-2.5 py-1 rounded-md text-xs text-text-secondary">
+                      <Terminal className="w-3.5 h-3.5" />
+                      <span>{tc.tool}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Text Body */}
+              {msg.sender === 'user' ? (
+                <div className="text-[15px]">{msg.text}</div>
+              ) : (
+                renderFormattedText(msg.text)
+              )}
+
+              {/* Citations */}
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" />
+                    Sources Used
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {msg.sources.map((src, s_idx) => (
+                      <div 
+                        key={s_idx} 
+                        className="bg-secondary border border-border rounded-lg p-3 hover:border-accent/50 transition-colors"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-medium text-sm text-text-primary">{src.title}</span>
+                          <span className="text-xs text-text-secondary bg-tertiary px-2 py-0.5 rounded-md">Page {src.page}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-text-secondary mb-2">
+                          <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> {src.well}</span>
+                          <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3" /> {src.depth}m</span>
+                        </div>
+                        <p className="text-xs text-text-secondary italic line-clamp-2 border-l-2 border-border pl-2">
+                          "{src.excerpt}"
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {msg.sender === 'assistant' && msg.id !== 'welcome' && !msg.id.startsWith('err-') && (
+                <div className="mt-4 pt-3 border-t border-border flex items-center gap-2">
+                  <button
+                    onClick={() => handlePlayAudio(msg)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-tertiary hover:bg-tertiary/80 text-text-secondary hover:text-text-primary rounded-md border border-border transition-colors"
+                  >
+                    {playingId === msg.id ? (
+                      <>
+                        <Square className="w-3.5 h-3.5 text-accent-red" />
+                        <span>Stop Audio</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-3.5 h-3.5 text-accent-cyan" />
+                        <span>Listen in English</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {msg.sender === 'user' && (
+              <div className="w-8 h-8 rounded-full bg-tertiary border border-border flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                <User className="w-4 h-4 text-text-secondary" />
+              </div>
+            )}
+          </div>
+        ))}
+
+        {loading && (
+          <div className="flex gap-4 justify-start">
+            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0 mt-1 shadow-sm">
+              <Bot className="w-4 h-4 text-white" />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-text-secondary animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-text-secondary animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-text-secondary animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              {isTranslatingMsg ? 'Translating...' : 'Analyzing context...'}
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} className="h-4" />
+      </div>
+
+      {/* Input Area */}
+      <div className="p-4 bg-secondary border-t border-border shrink-0">
+        <div className="max-w-4xl mx-auto">
+          {/* Quick Prompts */}
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex flex-wrap gap-2">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => handleSend(prompt)}
+                  disabled={loading}
+                  className="text-xs bg-tertiary border border-border hover:bg-tertiary/80 text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3 h-3 text-accent" />
+                  {prompt}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-secondary">Language:</span>
+              <select
+                value={inputLanguage}
+                onChange={(e) => setInputLanguage(e.target.value)}
+                className="bg-primary border border-border text-text-primary text-xs rounded-md px-2 py-1 outline-none focus:border-accent/50"
               >
-                {prompt}
-              </button>
-            ))}
+                <option value="en-US">English</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="en-IN">Hinglish</option>
+              </select>
+            </div>
           </div>
 
-          {/* Input Bar */}
-          <div className="p-3 border-t border-border bg-secondary">
-            <form 
-              onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-              className="flex gap-2"
-            >
-              <input
-                type="text"
-                placeholder="Ask about current risk, offset wells, stuck pipe mitigations, or 2500m hazards..."
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+            className="relative flex items-end gap-2"
+          >
+            <div className="flex-1 relative bg-primary border border-border focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/50 rounded-xl overflow-hidden transition-all shadow-sm flex items-center">
+              <button
+                type="button"
+                onClick={toggleListening}
+                className={`p-3 transition-colors ${isListening ? 'text-accent-red animate-pulse' : 'text-text-secondary hover:text-accent'}`}
+                title={isListening ? "Stop listening" : "Start voice input"}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+              <textarea
+                placeholder="Message Copilot..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
                 disabled={loading}
-                className="flex-1 bg-tertiary border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent transition-colors"
+                className="w-full bg-transparent text-text-primary placeholder:text-text-secondary text-sm px-4 py-3.5 focus:outline-none resize-none min-h-[52px] max-h-[150px] custom-scrollbar"
+                rows={1}
               />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="bg-accent text-white px-5 py-2.5 rounded-lg hover:bg-accent/90 transition-colors flex items-center gap-2 font-medium text-sm disabled:opacity-50 shrink-0"
-              >
-                <Send className="w-4 h-4" />
-                <span>Ask</span>
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Right: Operational Telemetry & Decision-Support Panel */}
-        <div className="w-[320px] bg-secondary border border-border rounded-lg p-4 flex flex-col gap-4 overflow-y-auto hidden xl:flex">
-          <div>
-            <h3 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-2">
-              <Activity className="w-4 h-4 text-accent" />
-              Live Rig Telemetry
-            </h3>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-tertiary p-2 rounded border border-border">
-                <span className="text-text-secondary">ROP</span>
-                <div className="font-mono text-sm font-bold text-text-primary">
-                  {context?.live_telemetry.rop || 12.4} m/hr
-                </div>
-              </div>
-              <div className="bg-tertiary p-2 rounded border border-border">
-                <span className="text-text-secondary">WOB</span>
-                <div className="font-mono text-sm font-bold text-text-primary">
-                  {context?.live_telemetry.wob || 18.2} klbf
-                </div>
-              </div>
-              <div className="bg-tertiary p-2 rounded border border-border">
-                <span className="text-text-secondary">Torque</span>
-                <div className="font-mono text-sm font-bold text-text-primary">
-                  {context?.live_telemetry.torque || 22.5} kNm
-                </div>
-              </div>
-              <div className="bg-tertiary p-2 rounded border border-border">
-                <span className="text-text-secondary">SPP</span>
-                <div className="font-mono text-sm font-bold text-text-primary">
-                  {context?.live_telemetry.standpipe_pressure || 2980} psi
-                </div>
-              </div>
             </div>
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <h3 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-2">
-              <Layers className="w-4 h-4 text-accent-cyan" />
-              Tool-Calling Architecture
-            </h3>
-            <div className="space-y-1.5 text-xs text-text-secondary">
-              <div className="bg-tertiary/60 p-2 rounded border border-border/80">
-                <span className="font-mono text-accent-cyan font-bold block">search_reports()</span>
-                RAG search on indexed PDF archives
-              </div>
-              <div className="bg-tertiary/60 p-2 rounded border border-border/80">
-                <span className="font-mono text-accent-cyan font-bold block">get_risk_factors()</span>
-                Synthesizes ML model & offset hazards
-              </div>
-              <div className="bg-tertiary/60 p-2 rounded border border-border/80">
-                <span className="font-mono text-accent-cyan font-bold block">get_events_by_depth()</span>
-                Depth-window incident correlation
-              </div>
-              <div className="bg-tertiary/60 p-2 rounded border border-border/80">
-                <span className="font-mono text-accent-cyan font-bold block">compare_wells()</span>
-                Cross-well stratigraphy & NPT metrics
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-auto border-t border-border pt-3 text-[11px] text-text-secondary leading-relaxed bg-tertiary/30 p-2.5 rounded border border-border">
-            <div className="flex items-center gap-1.5 font-bold text-accent-amber mb-1">
-              <ShieldCheck className="w-4 h-4 text-accent-amber" />
-              Decision-Support Standard
-            </div>
-            NWIS AI Drilling Copilot provides advisory decision-support grounded in offset well historical evidence. It does not issue autonomous rig commands.
+            <button
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="bg-accent hover:bg-accent/90 text-white p-3.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shrink-0 flex items-center justify-center"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+          <div className="text-center mt-3">
+            <span className="text-[11px] text-text-secondary">
+              Copilot is an advisory system. Always verify information before making drilling decisions.
+            </span>
           </div>
         </div>
       </div>
     </div>
   );
 };
+

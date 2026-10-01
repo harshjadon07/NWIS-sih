@@ -18,28 +18,28 @@ export const TopBar = () => {
   }, []);
 
   return (
-    <header className="h-14 bg-secondary border-b border-border flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-50">
+    <header className="h-14 bg-primary border-b border-border flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-50 shadow-sm">
       <div className="flex items-center gap-3">
-        <Activity className="w-6 h-6 text-accent" />
-        <div>
-          <span className="text-lg font-bold text-text-primary tracking-wide">NWIS</span>
-          <span className="text-xs text-text-secondary ml-2 hidden sm:inline">Nearby Wells Intelligence System</span>
+        <Activity className="w-5 h-5 text-accent" />
+        <div className="flex items-center gap-2">
+          <span className="text-base font-semibold text-text-primary tracking-tight">NWIS</span>
+          <span className="text-sm text-text-secondary hidden sm:inline">Nearby Wells Intelligence System</span>
         </div>
       </div>
 
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
-          <span className="text-xs text-accent-green font-medium">SYSTEM ONLINE</span>
+          <span className="w-2 h-2 rounded-full bg-accent-green" />
+          <span className="text-xs text-text-secondary font-medium">System Online</span>
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="h-4 w-px bg-border" />
 
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-3 text-sm">
           <span className="text-text-secondary">Active Well:</span>
-          <span className="font-bold text-text-primary">WELL-A</span>
-          <span className="text-text-secondary">|</span>
-          <span className="font-mono text-accent-cyan">{depth.toFixed(1)}m</span>
+          <span className="font-medium text-text-primary">WELL-A</span>
+          <span className="text-border">/</span>
+          <span className="font-medium text-text-primary">{depth.toFixed(1)}m</span>
         </div>
       </div>
     </header>
