@@ -19,18 +19,19 @@ class PurePythonVectorDB:
         return [w.lower() for w in ''.join(c if c.isalnum() else ' ' for c in text).split()]
 
     def load(self):
-        if os.path.exists(self.index_file):
-            try:
-                with open(self.index_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.documents = data.get('documents', [])
-                    self.idf = data.get('idf', {})
-            except Exception:
-                pass
+        try:
+            from app.services.mock_vector_db_data import DATA
+            self.documents = DATA.get('documents', [])
+            self.idf = DATA.get('idf', {})
+        except ImportError:
+            pass
 
     def save(self):
-        with open(self.index_file, 'w', encoding='utf-8') as f:
-            json.dump({'documents': self.documents, 'idf': self.idf}, f)
+        try:
+            with open(self.index_file, 'w', encoding='utf-8') as f:
+                json.dump({'documents': self.documents, 'idf': self.idf}, f)
+        except OSError:
+            pass
 
     def _compute_idf(self):
         doc_count = len(self.documents)
