@@ -11,7 +11,8 @@ class PurePythonVectorDB:
         self.tf_idf = []
         self.vocab = set()
         self.idf = {}
-        self.index_file = "mock_vector_db.json"
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.index_file = os.path.join(base_dir, "mock_vector_db.json")
         self.load()
 
     def tokenize(self, text: str) -> List[str]:
