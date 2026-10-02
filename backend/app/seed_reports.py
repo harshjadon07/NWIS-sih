@@ -34,7 +34,7 @@ def seed_sample_reports():
                 well_id=well_id
             )
             db.add(doc)
-            db.commit()
+            db.flush()
             db.refresh(doc)
             
             texts = [c["text"] for c in chunks_data]
